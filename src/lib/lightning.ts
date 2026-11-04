@@ -147,8 +147,14 @@ export async function checkSettlement(paymentHash: string): Promise<SettlementRe
       `/api/status?hash=${encodeURIComponent(paymentHash)}`,
     )
     if (!response.ok) return { settled: false, indeterminate: true }
-    const data = (await response.json()) as { paid?: boolean }
-    return { settled: data.paid === true, indeterminate: false }
+    const data = (await response.json()) as { paid?: boolean; known?: boolean }
+    // `known` marks a definite answer from the backend — including a 404,
+    // which means the invoice does not exist rather than that the lookup
+    // failed. Without it we cannot tell "not paid" from "could not check".
+    return {
+      settled: data.paid === true,
+      indeterminate: data.known !== true,
+    }
   } catch {
     return { settled: false, indeterminate: true }
   }

@@ -38,17 +38,31 @@ export async function GET(request: Request): Promise<Response> {
       { headers: { 'X-Api-Key': invoiceKey } },
     )
 
+    // A 404 is a definite answer, not a failure to read: LNbits says the
+    // invoice does not exist. Report it as unpaid-and-known so the client
+    // does not fall into the "status unconfirmed" branch.
+    if (lnbitsResponse.status === 404) {
+      return Response.json(
+        { paid: false, known: true },
+        { headers: { 'cache-control': 'no-store' } },
+      )
+    }
+
     if (!lnbitsResponse.ok) {
       console.error('[status] LNbits lookup failed', lnbitsResponse.status)
       return new Response('Could not read the payment status.', { status: 502 })
     }
 
     const data = (await lnbitsResponse.json()) as Record<string, unknown>
-    const details = (data.details ?? {}) as Record<string, unknown>
-    const paid = data.paid === true || details.status === 'success'
+
+    // `paid` is the only field LNbits sets consistently across settled,
+    // failed and pending responses. `details.status` is present only for
+    // failed payments and for wallet owners on a successful refresh, so it
+    // is not safe to treat its absence as "unpaid" or its presence as truth.
+    const paid = data.paid === true
 
     return Response.json(
-      { paid },
+      { paid, known: true },
       { headers: { 'cache-control': 'no-store' } },
     )
   } catch (error) {

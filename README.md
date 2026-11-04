@@ -50,11 +50,44 @@ functions and never enter the client bundle.
 
 See `.env.example` for the full list.
 
+### Testing without a backend
+
+Set `VITE_MOCK_BACKEND=true` in `.env.local` and run `npm run dev`. A dev-only
+mock intercepts `/api/*`, issues fake invoices and settles them after six
+seconds, so the whole UI flow can be exercised with no LNbits instance and no
+real money. It is excluded from production builds.
+
+The mock does **not** stub the Nimiq payment call — inside Nimiq Pay that still
+reaches the real wallet, and its invoices are deliberately not payable.
+
 ### Lightning backend
 
 `api/invoice.ts` and `api/status.ts` talk to an [LNbits](https://lnbits.com)
-instance. Only the **invoice key** is used — it cannot send payments, so a leak
-could not drain the wallet.
+instance.
+
+1. Create a free account at [demo.lnbits.com](https://demo.lnbits.com) (or run
+   your own instance — see the [LNbits install docs](https://docs.lnbits.com/guide/installation/)).
+2. Open the wallet and copy the **Invoice/read key** from the API info panel.
+3. Set `LNBITS_URL` and `LNBITS_INVOICE_KEY` in your deployment environment.
+
+Only the **invoice key** is used. It can create invoices and read their status
+but cannot send payments, so a leak could not drain the wallet. Never use the
+admin key here.
+
+> `legend.lnbits.com`, named in many older tutorials, is no longer reachable.
+> Demo instances are custodial and meant for testing — do not leave meaningful
+> funds in one.
+
+#### API behaviour this relies on
+
+- `POST /api/v1/payments` with `{ out: false, amount, unit: 'sat' }` returns
+  both `payment_hash` and `payment_request`.
+- `GET /api/v1/payments/{hash}` returns `paid: true` once settled, and **404**
+  when the invoice does not exist. The 404 is mapped to a definite
+  "not paid" rather than an unreadable status, so a missing invoice is never
+  confused with an unreachable backend.
+- `details.status` is deliberately not trusted: LNbits sets it only for failed
+  payments and for wallet owners on a successful refresh.
 
 ## Constraints
 
