@@ -6,20 +6,12 @@
  * success until this endpoint reports `paid: true`.
  */
 
-function readEnv(name: string): string {
-  const value = process.env[name]
-  if (!value || !value.trim()) {
-    throw new Error(`Missing required environment variable ${name}`)
-  }
-  return value.trim().replace(/\/+$/, '')
-}
+import { json, readConfig } from './lnbits'
 
-export async function GET(request: Request): Promise<Response> {
-  let lnbitsUrl: string
-  let invoiceKey: string
+export async function checkStatus(request: Request): Promise<Response> {
+  let config
   try {
-    lnbitsUrl = readEnv('LNBITS_URL')
-    invoiceKey = readEnv('LNBITS_INVOICE_KEY')
+    config = readConfig()
   } catch (error) {
     console.error('[status] configuration error', error)
     return new Response('Lightning backend is not configured.', { status: 500 })
@@ -33,38 +25,30 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const lnbitsResponse = await fetch(
-      `${lnbitsUrl}/api/v1/payments/${encodeURIComponent(hash)}`,
-      { headers: { 'X-Api-Key': invoiceKey } },
+    const response = await fetch(
+      `${config.url}/api/v1/payments/${encodeURIComponent(hash)}`,
+      { headers: { 'X-Api-Key': config.invoiceKey } },
     )
 
     // A 404 is a definite answer, not a failure to read: LNbits says the
     // invoice does not exist. Report it as unpaid-and-known so the client
     // does not fall into the "status unconfirmed" branch.
-    if (lnbitsResponse.status === 404) {
-      return Response.json(
-        { paid: false, known: true },
-        { headers: { 'cache-control': 'no-store' } },
-      )
+    if (response.status === 404) {
+      return json({ paid: false, known: true })
     }
 
-    if (!lnbitsResponse.ok) {
-      console.error('[status] LNbits lookup failed', lnbitsResponse.status)
+    if (!response.ok) {
+      console.error('[status] LNbits lookup failed', response.status)
       return new Response('Could not read the payment status.', { status: 502 })
     }
 
-    const data = (await lnbitsResponse.json()) as Record<string, unknown>
+    const data = (await response.json()) as Record<string, unknown>
 
     // `paid` is the only field LNbits sets consistently across settled,
     // failed and pending responses. `details.status` is present only for
     // failed payments and for wallet owners on a successful refresh, so it
     // is not safe to treat its absence as "unpaid" or its presence as truth.
-    const paid = data.paid === true
-
-    return Response.json(
-      { paid, known: true },
-      { headers: { 'cache-control': 'no-store' } },
-    )
+    return json({ paid: data.paid === true, known: true })
   } catch (error) {
     console.error('[status] request failed', error)
     return new Response('Could not reach the Lightning backend.', { status: 502 })
