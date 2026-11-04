@@ -4,14 +4,20 @@
  * Secrets (LNbits keys) live only in the serverless function environment.
  */
 
-function requireEnv(name: string, value: string | undefined): string {
-  if (!value || !value.trim()) {
-    throw new Error(
-      `Missing required env var ${name}. Copy .env.example to .env.local and fill it in.`,
-    )
-  }
-  return value.trim()
+/**
+ * VITE_* vars are inlined at build time, so a deployment built without them
+ * would otherwise throw during module init and render a blank page. Presentation
+ * values fall back to a sensible default and warn instead, so a misconfigured
+ * deploy still shows a working app rather than nothing at all.
+ */
+function readEnv(name: string, value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim()
+  if (trimmed) return trimmed
+  console.warn(`[config] ${name} is not set; falling back to "${fallback}".`)
+  return fallback
 }
+
+const DEFAULT_PRESETS_SATS = [1_000, 5_000, 21_000]
 
 function parsePresets(raw: string | undefined): number[] {
   const presets = (raw ?? '')
@@ -20,15 +26,16 @@ function parsePresets(raw: string | undefined): number[] {
     .filter((n) => Number.isFinite(n) && n > 0)
 
   if (presets.length === 0) {
-    throw new Error(
-      'VITE_TIP_PRESETS_SATS must list at least one positive integer amount in sats.',
+    console.warn(
+      '[config] VITE_TIP_PRESETS_SATS is unset or invalid; using defaults.',
     )
+    return DEFAULT_PRESETS_SATS
   }
   return [...new Set(presets)].sort((a, b) => a - b)
 }
 
 export const creator = {
-  name: requireEnv('VITE_CREATOR_NAME', import.meta.env.VITE_CREATOR_NAME),
+  name: readEnv('VITE_CREATOR_NAME', import.meta.env.VITE_CREATOR_NAME, 'This creator'),
   handle: (import.meta.env.VITE_CREATOR_HANDLE ?? '').trim(),
   blurb: (import.meta.env.VITE_CREATOR_BLURB ?? '').trim(),
   avatarUrl: (import.meta.env.VITE_CREATOR_AVATAR_URL ?? '').trim(),

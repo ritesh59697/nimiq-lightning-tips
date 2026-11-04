@@ -6,8 +6,8 @@
  * them. Route modules live in `server/` and are imported here.
  */
 
-import { createInvoice } from '../server/invoice'
-import { checkStatus } from '../server/status'
+import { createInvoice } from '../server/invoice.js'
+import { checkStatus } from '../server/status.js'
 
 export default {
   async fetch(request: Request): Promise<Response> {

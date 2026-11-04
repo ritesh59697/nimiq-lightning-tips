@@ -6,22 +6,24 @@
  * success until this endpoint reports `paid: true`.
  */
 
-import { json, readConfig } from './lnbits'
+import { json, readConfig } from './lnbits.js'
 
 export async function checkStatus(request: Request): Promise<Response> {
+  // Validate the request before touching configuration, so a malformed
+  // request is reported as a 400 rather than blamed on the backend.
+  const hash = new URL(request.url).searchParams.get('hash')
+  if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) {
+    return new Response('A 64-character hex payment hash is required.', {
+      status: 400,
+    })
+  }
+
   let config
   try {
     config = readConfig()
   } catch (error) {
     console.error('[status] configuration error', error)
     return new Response('Lightning backend is not configured.', { status: 500 })
-  }
-
-  const hash = new URL(request.url).searchParams.get('hash')
-  if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) {
-    return new Response('A 64-character hex payment hash is required.', {
-      status: 400,
-    })
   }
 
   try {

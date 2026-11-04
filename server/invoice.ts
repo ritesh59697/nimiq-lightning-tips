@@ -5,17 +5,11 @@
  * server-side and never taken from a client-supplied invoice string.
  */
 
-import { json, readConfig } from './lnbits'
+import { json, readConfig } from './lnbits.js'
 
 export async function createInvoice(request: Request): Promise<Response> {
-  let config
-  try {
-    config = readConfig()
-  } catch (error) {
-    console.error('[invoice] configuration error', error)
-    return new Response('Lightning backend is not configured.', { status: 500 })
-  }
-
+  // Validate the request before touching configuration, so a malformed
+  // request is reported as a 400 rather than blamed on the backend.
   let body: { amountSats?: unknown }
   try {
     body = (await request.json()) as { amountSats?: unknown }
@@ -26,6 +20,14 @@ export async function createInvoice(request: Request): Promise<Response> {
   const amountSats = Number(body.amountSats)
   if (!Number.isInteger(amountSats) || amountSats <= 0) {
     return new Response('amountSats must be a positive integer.', { status: 400 })
+  }
+
+  let config
+  try {
+    config = readConfig()
+  } catch (error) {
+    console.error('[invoice] configuration error', error)
+    return new Response('Lightning backend is not configured.', { status: 500 })
   }
 
   try {
