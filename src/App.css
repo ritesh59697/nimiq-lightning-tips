@@ -1,0 +1,158 @@
+:root {
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --border: #e3e6ec;
+  --text: #1f2348;
+  --muted: #6b7180;
+  --accent: #1f2348;
+  --ok: #107d55;
+  --warn: #8a5b00;
+  --error: #b3261e;
+  --radius: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161f;
+    --surface: #1d2030;
+    --border: #2e3346;
+    --text: #f2f3f7;
+    --muted: #a0a6b8;
+    --accent: #f2f3f7;
+    --ok: #4ad295;
+    --warn: #e8b55c;
+    --error: #ff6b6b;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.creator { text-align: center; display: grid; gap: 0.35rem; justify-items: center; }
+
+.avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface);
+}
+
+.avatar--fallback {
+  display: grid;
+  place-items: center;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.creator h1 { font-size: 1.4rem; margin: 0.4rem 0 0; }
+.handle { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.blurb { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.95rem; line-height: 1.5; }
+
+.notice {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.notice--warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+
+.amounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr)); gap: 0.6rem; }
+
+.amount {
+  padding: 0.9rem 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.amount:hover:not(:disabled) { border-color: var(--accent); }
+.amount--active { border-color: var(--accent); }
+.amount:disabled { opacity: 0.55; cursor: default; }
+.unit { font-weight: 400; color: var(--muted); font-size: 0.85em; }
+
+.pay {
+  padding: 1.05rem 1rem;
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.pay:disabled { opacity: 0.45; cursor: default; }
+.pay:active:not(:disabled) { transform: translateY(1px); }
+
+.result {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+.result h2 { margin: 0 0 0.4rem; font-size: 1.02rem; }
+.result p { margin: 0 0 0.5rem; }
+.result p:last-child { margin-bottom: 0; }
+.result--ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+.result--ok h2 { color: var(--ok); }
+.result--warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.result--warn h2 { color: var(--warn); }
+.result--error { border-color: color-mix(in srgb, var(--error) 45%, var(--border)); }
+.result--error h2 { color: var(--error); }
+.result--pending { color: var(--muted); text-align: center; }
+.emphasis { font-weight: 600; }
+
+.receipt { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.8rem; margin: 0.75rem 0 0; font-size: 0.82rem; }
+.receipt dt { color: var(--muted); }
+.receipt dd { margin: 0; overflow-wrap: anywhere; }
+.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.95em; }
+
+.retry {
+  margin-top: 0.3rem;
+  padding: 0.6rem 1.1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.footer { color: var(--muted); font-size: 0.8rem; line-height: 1.55; text-align: center; }
+.footer p { margin: 0; }
