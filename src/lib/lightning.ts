@@ -116,6 +116,14 @@ export async function createInvoice(amountSats: number): Promise<Invoice> {
     body: JSON.stringify({ amountSats }),
   })
 
+  // A 500 here means the deployment has no Lightning backend configured yet.
+  // Say so plainly rather than showing the raw server message to a supporter.
+  if (response.status === 500) {
+    throw new Error(
+      'Tips are not switched on yet — this app still needs its Lightning backend connected.',
+    )
+  }
+
   if (!response.ok) {
     const detail = await response.text().catch(() => '')
     throw new Error(
