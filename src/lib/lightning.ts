@@ -48,8 +48,11 @@ const ERROR_COPY: Record<string, { message: string; recoverable: boolean }> = {
     message: 'The invoice was rejected as invalid. It may have expired.',
     recoverable: true,
   },
+  // Nimiq Pay also raises this when the swap cannot be prepared, e.g. an empty
+  // or too-small balance, so the copy must not claim a connectivity problem.
   NETWORK_ERROR: {
-    message: 'Network problem reaching Nimiq Pay. Your funds were not moved.',
+    message:
+      'Nimiq Pay could not prepare the payment. Check you have enough NIM or USDT to cover the tip and fees, then try again. Your funds were not moved.',
     recoverable: true,
   },
   UNKNOWN_REQUEST: {
@@ -76,6 +79,18 @@ function extractPriorAttempt(data: unknown): { hash?: string; swapId?: string } 
   }
 }
 
+/** Nimiq Pay's own wording, appended so a supporter sees the real cause. */
+function withWalletReason(message: string, error: NimiqProviderError): string {
+  const reason = error.message?.trim()
+  // A cancellation needs no explanation beyond our own copy.
+  if (error.type === 'PERMISSION_DENIED') return message
+  if (!reason || reason === error.type || message.includes(reason)) return message
+  const MAX_REASON_LENGTH = 160
+  const clipped =
+    reason.length > MAX_REASON_LENGTH ? `${reason.slice(0, MAX_REASON_LENGTH)}…` : reason
+  return `${message} Nimiq Pay said: "${clipped}"`
+}
+
 export function describeError(error: unknown): {
   type: string
   message: string
@@ -87,7 +102,8 @@ export function describeError(error: unknown): {
     : NimiqProviderError.from(error)
 
   if (providerError) {
-    const copy = ERROR_COPY[providerError.type] ?? {
+    const known = ERROR_COPY[providerError.type]
+    const copy = known ?? {
       message: providerError.message || 'The payment could not be completed.',
       // Unrecognised failures are treated as unsafe to retry: we cannot prove
       // no money moved, and a wrong retry sends a second real tip.
@@ -95,7 +111,7 @@ export function describeError(error: unknown): {
     }
     return {
       type: providerError.type,
-      message: copy.message,
+      message: known ? withWalletReason(copy.message, providerError) : copy.message,
       recoverable: copy.recoverable,
       priorAttempt: extractPriorAttempt(providerError.data),
     }
