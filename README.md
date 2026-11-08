@@ -6,6 +6,8 @@ paid from their NIM or USDT balance via a self-custodial atomic swap.
 Submitted to the [Nimiq Mini Apps Competition](https://miniappscompetition.com)
 Cycle III.
 
+**Live:** open <https://nimiq-lightning-tips.vercel.app> in Nimiq Pay → Mini Apps.
+
 ## How it works
 
 1. The Mini App asks its backend for a fixed-amount BOLT11 invoice.
