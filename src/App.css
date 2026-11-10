@@ -402,7 +402,8 @@ button { font: inherit; }
   transition: border-color var(--duration-fast) var(--easing);
 }
 
-.retry:hover { border-color: var(--text-muted); }
+.retry:hover:not(:disabled) { border-color: var(--text-muted); }
+.retry:disabled { opacity: 0.6; cursor: default; }
 
 .pending-note {
   margin: calc(var(--s2) * -1) 0 0;

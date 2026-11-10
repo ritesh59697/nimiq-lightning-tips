@@ -45,3 +45,19 @@ export const tipPresetsSats = parsePresets(import.meta.env.VITE_TIP_PRESETS_SATS
 
 /** Optional Nimiq address used to record a public on-chain tip memo. */
 export const memoRecipient = (import.meta.env.VITE_TIP_MEMO_RECIPIENT ?? '').trim() || null
+
+const DEFAULT_WALLET_STALL_SECONDS = 60
+
+/**
+ * How long to wait on Nimiq Pay's payment sheet before telling the supporter
+ * it has gone quiet. Builders have reported `payLightningInvoice` sometimes
+ * never returning after the NIM/USDT choice, which would otherwise leave the
+ * page stuck on "Approve in Nimiq Pay…" with no way forward.
+ */
+function parseStallSeconds(raw: string | undefined): number {
+  const seconds = Number.parseInt((raw ?? '').trim(), 10)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_WALLET_STALL_SECONDS
+}
+
+export const walletStallMs =
+  parseStallSeconds(import.meta.env.VITE_WALLET_STALL_SECONDS) * 1_000

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { init, type NimiqProvider } from '@nimiq/mini-app-sdk'
-import { creator, tipPresetsSats } from './lib/config'
+import { creator, tipPresetsSats, walletStallMs } from './lib/config'
 import {
   awaitSettlement,
+  checkSettlement,
   createInvoice,
   describeError,
   payInvoice,
@@ -15,6 +16,7 @@ import {
   CircleCheck,
   CircleX,
   Loader2,
+  RefreshCw,
   RotateCcw,
   Smartphone,
   TriangleAlert,
@@ -22,6 +24,9 @@ import {
   Zap,
 } from 'lucide-react'
 import './App.css'
+
+/** Progress of the "Nimiq Pay has gone quiet" fallback. */
+type StallState = 'none' | 'stalled' | 'checking' | 'not-yet' | 'unreachable'
 
 type ProviderState =
   | { status: 'connecting' }
@@ -33,6 +38,10 @@ export default function App() {
   const [stage, setStage] = useState<TipStage>({ status: 'idle' })
   const [selectedSats, setSelectedSats] = useState<number>(tipPresetsSats[0])
   const abortRef = useRef<AbortController | null>(null)
+  const [stall, setStall] = useState<StallState>('none')
+  // Set when a manual status check proves the tip arrived while the wallet
+  // call was still pending, so a late reply cannot overwrite that result.
+  const settledByCheckRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!insideNimiqPay) {
@@ -66,6 +75,31 @@ export default function App() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // Nimiq Pay has been seen never returning from payLightningInvoice. Rather
+  // than spin forever, offer a status check after a while. It never offers a
+  // new tip: the pending payment could still complete and send a second one.
+  useEffect(() => {
+    if (stage.status !== 'awaiting-approval') return
+    const timer = setTimeout(() => setStall('stalled'), walletStallMs)
+    return () => {
+      clearTimeout(timer)
+      setStall('none')
+    }
+  }, [stage])
+
+  const checkStalledPayment = useCallback(async () => {
+    if (stage.status !== 'awaiting-approval') return
+    const { invoice } = stage
+    setStall('checking')
+    const result = await checkSettlement(invoice.paymentHash)
+    if (result.settled) {
+      settledByCheckRef.current = invoice.paymentHash
+      setStage({ status: 'settled', invoice, swapId: 'unknown', txHash: 'unknown' })
+      return
+    }
+    setStall(result.indeterminate ? 'unreachable' : 'not-yet')
+  }, [stage])
+
   const sendTip = useCallback(async () => {
     if (provider.status !== 'ready') return
 
@@ -93,6 +127,7 @@ export default function App() {
     try {
       payment = await payInvoice(provider.nimiq, invoice)
     } catch (error) {
+      if (settledByCheckRef.current === invoice.paymentHash) return
       const described = describeError(error)
 
       // A duplicate or unknown-outcome error may mean money already moved.
@@ -126,6 +161,7 @@ export default function App() {
       return
     }
 
+    if (settledByCheckRef.current === invoice.paymentHash) return
     setStage({ status: 'confirming', invoice, ...payment })
 
     const settlement = await awaitSettlement(invoice.paymentHash, {
@@ -232,6 +268,10 @@ export default function App() {
 
         {showProgress ? <Progress stage={stage} /> : null}
       </section>
+
+      {stage.status === 'awaiting-approval' && stall !== 'none' ? (
+        <StallNotice stall={stall} onCheck={checkStalledPayment} />
+      ) : null}
 
       <StageDetail stage={stage} onReset={() => setStage({ status: 'idle' })} />
 
@@ -400,5 +440,41 @@ function StageDetail({
           ? 'Choose NIM or USDT and approve the payment in Nimiq Pay.'
           : 'Payment sent. Waiting for the Bitcoin to reach the creator.'}
     </p>
+  )
+}
+
+function StallNotice({ stall, onCheck }: { stall: StallState; onCheck: () => void }) {
+  const checking = stall === 'checking'
+  return (
+    <div className="result result--warn" role="status">
+      <TriangleAlert className="result-icon" size={28} aria-hidden="true" />
+      <div className="result-body">
+        <h2>Nimiq Pay hasn&apos;t responded</h2>
+        <p>
+          If you approved the payment, it may still go through, so don&apos;t start
+          a new tip. Check whether it reached the creator instead.
+        </p>
+        {stall === 'not-yet' ? (
+          <p className="emphasis">
+            Not received yet. Check again in a moment. If you never approved
+            anything in Nimiq Pay, you can reopen the mini app to start over.
+          </p>
+        ) : null}
+        {stall === 'unreachable' ? (
+          <p className="emphasis">
+            Couldn&apos;t reach the creator&apos;s Lightning wallet to check. Try again
+            in a moment.
+          </p>
+        ) : null}
+        <button type="button" className="retry" onClick={onCheck} disabled={checking}>
+          {checking ? (
+            <Loader2 className="spin" size={16} aria-hidden="true" />
+          ) : (
+            <RefreshCw size={16} aria-hidden="true" />
+          )}
+          {checking ? 'Checking…' : 'Check if the tip arrived'}
+        </button>
+      </div>
+    </div>
   )
 }
