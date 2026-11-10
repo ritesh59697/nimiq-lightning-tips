@@ -9,6 +9,18 @@ import {
   type TipStage,
 } from './lib/lightning'
 import { formatSats, insideNimiqPay, lightningAvailable } from './lib/host'
+import {
+  ArrowLeftRight,
+  Check,
+  CircleCheck,
+  CircleX,
+  Loader2,
+  RotateCcw,
+  Smartphone,
+  TriangleAlert,
+  Wallet,
+  Zap,
+} from 'lucide-react'
 import './App.css'
 
 type ProviderState =
@@ -140,16 +152,23 @@ export default function App() {
 
   const disabled = provider.status !== 'ready' || busy || !lightningAvailable
 
+  const showProgress = busy || stage.status === 'settled'
+
   return (
     <main className="app">
       <header className="creator">
-        {creator.avatarUrl ? (
-          <img className="avatar" src={creator.avatarUrl} alt="" />
-        ) : (
-          <div className="avatar avatar--fallback" aria-hidden="true">
-            {creator.name.slice(0, 1)}
-          </div>
-        )}
+        <div className="avatar-ring">
+          {creator.avatarUrl ? (
+            <img className="avatar" src={creator.avatarUrl} alt="" />
+          ) : (
+            <div className="avatar avatar--fallback" aria-hidden="true">
+              {creator.name.slice(0, 1)}
+            </div>
+          )}
+          <span className="avatar-badge" aria-hidden="true">
+            <Zap size={14} strokeWidth={2.5} />
+          </span>
+        </div>
         <h1>{creator.name}</h1>
         {creator.handle ? <p className="handle">{creator.handle}</p> : null}
         {creator.blurb ? <p className="blurb">{creator.blurb}</p> : null}
@@ -157,47 +176,130 @@ export default function App() {
 
       {!lightningAvailable ? (
         <p className="notice notice--warn" role="status">
-          Nimiq Pay is on testnet. Lightning tips need mainnet — switch networks to
-          send one.
+          <TriangleAlert size={18} aria-hidden="true" />
+          <span>
+            Nimiq Pay is on testnet. Lightning tips need mainnet, so switch networks
+            to send one.
+          </span>
         </p>
       ) : null}
 
       {provider.status === 'unavailable' ? (
         <p className="notice" role="status">
-          {provider.reason}
+          <Smartphone size={18} aria-hidden="true" />
+          <span>{provider.reason}</span>
         </p>
       ) : null}
 
-      <section className="amounts" aria-label="Tip amount">
-        {tipPresetsSats.map((sats) => (
-          <button
-            key={sats}
-            type="button"
-            className={sats === selectedSats ? 'amount amount--active' : 'amount'}
-            aria-pressed={sats === selectedSats}
-            onClick={() => setSelectedSats(sats)}
-            disabled={busy}
-          >
-            {formatSats(sats)} <span className="unit">sats</span>
-          </button>
-        ))}
-      </section>
+      <section className="tip-card" aria-labelledby="tip-heading">
+        <h2 id="tip-heading" className="tip-heading">
+          Choose an amount
+        </h2>
 
-      <button type="button" className="pay" onClick={sendTip} disabled={disabled}>
-        {stageLabel(stage, selectedSats)}
-      </button>
+        <p className="amount-display" aria-live="polite">
+          <span className="amount-value">{formatSats(selectedSats)}</span>
+          <span className="amount-unit">sats</span>
+        </p>
+
+        <div className="amounts" role="group" aria-label="Tip amount">
+          {tipPresetsSats.map((sats) => (
+            <button
+              key={sats}
+              type="button"
+              className={sats === selectedSats ? 'amount amount--active' : 'amount'}
+              aria-pressed={sats === selectedSats}
+              onClick={() => setSelectedSats(sats)}
+              disabled={busy}
+            >
+              {formatSats(sats)}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          className="pay"
+          onClick={stage.status === 'settled' ? () => setStage({ status: 'idle' }) : sendTip}
+          disabled={disabled}
+        >
+          {busy ? (
+            <Loader2 className="spin" size={20} aria-hidden="true" />
+          ) : (
+            <Zap size={20} aria-hidden="true" />
+          )}
+          <span>{stageLabel(stage, selectedSats)}</span>
+        </button>
+
+        {showProgress ? <Progress stage={stage} /> : null}
+      </section>
 
       <StageDetail stage={stage} onReset={() => setStage({ status: 'idle' })} />
 
-      <footer className="footer">
-        <p>
-          Paid in NIM or USDT from your Nimiq Pay balance and delivered over
-          Bitcoin Lightning by a self-custodial atomic swap. Your keys never leave
-          the wallet.
-        </p>
+      <footer className="how">
+        <h2 className="how-heading">How it works</h2>
+        <ol className="how-steps">
+          <li>
+            <Wallet size={18} aria-hidden="true" />
+            <span>You pay in NIM or USDT from your Nimiq Pay balance.</span>
+          </li>
+          <li>
+            <ArrowLeftRight size={18} aria-hidden="true" />
+            <span>An atomic swap converts it to Bitcoin. Your keys never leave the wallet.</span>
+          </li>
+          <li>
+            <Zap size={18} aria-hidden="true" />
+            <span>The tip arrives over Lightning, and we confirm it before saying so.</span>
+          </li>
+        </ol>
       </footer>
     </main>
   )
+}
+
+const PROGRESS_STEPS = ['Invoice', 'Approve', 'Swap', 'Delivered'] as const
+
+function progressIndex(stage: TipStage): number {
+  switch (stage.status) {
+    case 'creating-invoice':
+      return 0
+    case 'awaiting-approval':
+      return 1
+    case 'confirming':
+      return 2
+    case 'settled':
+      return PROGRESS_STEPS.length
+    default:
+      return -1
+  }
+}
+
+function Progress({ stage }: { stage: TipStage }) {
+  const current = progressIndex(stage)
+  return (
+    <ol className="progress" aria-label="Payment progress">
+      {PROGRESS_STEPS.map((label, index) => {
+        const state = index < current ? 'done' : index === current ? 'current' : 'todo'
+        return (
+          <li
+            key={label}
+            className={`progress-step progress-step--${state}`}
+            aria-current={state === 'current' ? 'step' : undefined}
+          >
+            <span className="progress-dot" aria-hidden="true">
+              {state === 'done' ? <Check size={12} strokeWidth={3} /> : null}
+            </span>
+            <span className="progress-label">{label}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/** Long hashes are unreadable on a phone; keep both ends for recognition. */
+function shorten(value: string): string {
+  const KEEP = 8
+  return value.length > KEEP * 2 + 1 ? `${value.slice(0, KEEP)}…${value.slice(-KEEP)}` : value
 }
 
 function stageLabel(stage: TipStage, selectedSats: number): string {
@@ -207,7 +309,7 @@ function stageLabel(stage: TipStage, selectedSats: number): string {
     case 'awaiting-approval':
       return 'Approve in Nimiq Pay…'
     case 'confirming':
-      return 'Confirming settlement…'
+      return 'Confirming delivery…'
     case 'settled':
       return 'Send another tip'
     default:
@@ -225,19 +327,33 @@ function StageDetail({
   if (stage.status === 'idle') return null
 
   if (stage.status === 'settled') {
+    const receipt = [
+      { label: 'Swap', value: stage.swapId },
+      { label: 'Transaction', value: stage.txHash },
+    ].filter((row) => row.value && row.value !== 'unknown')
+
     return (
       <div className="result result--ok" role="status">
-        <h2>Tip delivered</h2>
-        <p>
-          {formatSats(stage.invoice.amountSats)} sats reached {creator.name}.
-          Thank you.
-        </p>
-        <dl className="receipt">
-          <dt>Swap</dt>
-          <dd>{stage.swapId}</dd>
-          <dt>Transaction</dt>
-          <dd className="mono">{stage.txHash}</dd>
-        </dl>
+        <CircleCheck className="result-icon" size={28} aria-hidden="true" />
+        <div className="result-body">
+          <h2>Tip delivered</h2>
+          <p>
+            {formatSats(stage.invoice.amountSats)} sats reached {creator.name}. Thank
+            you.
+          </p>
+          {receipt.length > 0 ? (
+            <dl className="receipt">
+              {receipt.map((row) => (
+                <div key={row.label} className="receipt-row">
+                  <dt>{row.label}</dt>
+                  <dd className="mono" title={row.value}>
+                    {shorten(row.value)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+        </div>
       </div>
     )
   }
@@ -245,12 +361,15 @@ function StageDetail({
   if (stage.status === 'indeterminate') {
     return (
       <div className="result result--warn" role="alert">
-        <h2>Status unconfirmed</h2>
-        <p>{stage.detail}</p>
-        <p className="emphasis">
-          Do not pay this invoice again — that would send a second tip. Check with
-          the creator if it does not appear shortly.
-        </p>
+        <TriangleAlert className="result-icon" size={28} aria-hidden="true" />
+        <div className="result-body">
+          <h2>Status unconfirmed</h2>
+          <p>{stage.detail}</p>
+          <p className="emphasis">
+            Do not pay this invoice again, as that would send a second tip. Check
+            with the creator if it does not appear shortly.
+          </p>
+        </div>
       </div>
     )
   }
@@ -258,24 +377,28 @@ function StageDetail({
   if (stage.status === 'failed') {
     return (
       <div className="result result--error" role="alert">
-        <h2>Payment not completed</h2>
-        <p>{stage.reason}</p>
-        {stage.recoverable ? (
-          <button type="button" className="retry" onClick={onReset}>
-            Try again
-          </button>
-        ) : null}
+        <CircleX className="result-icon" size={28} aria-hidden="true" />
+        <div className="result-body">
+          <h2>Payment not completed</h2>
+          <p>{stage.reason}</p>
+          {stage.recoverable ? (
+            <button type="button" className="retry" onClick={onReset}>
+              <RotateCcw size={16} aria-hidden="true" />
+              Try again
+            </button>
+          ) : null}
+        </div>
       </div>
     )
   }
 
   return (
-    <p className="result result--pending" role="status">
+    <p className="pending-note" role="status">
       {stage.status === 'creating-invoice'
         ? 'Asking the Lightning backend for a fresh invoice.'
         : stage.status === 'awaiting-approval'
-          ? 'Choose NIM or USDT and approve the swap in Nimiq Pay.'
-          : 'Payment submitted. Waiting for the creator to receive the Bitcoin.'}
+          ? 'Choose NIM or USDT and approve the payment in Nimiq Pay.'
+          : 'Payment sent. Waiting for the Bitcoin to reach the creator.'}
     </p>
   )
 }
