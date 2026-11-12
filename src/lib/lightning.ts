@@ -141,6 +141,14 @@ export async function createInvoice(amountSats: number, message = ''): Promise<I
     )
   }
 
+  // A 502 means the creator's wallet did not answer. Nothing was created or
+  // charged, so say that plainly instead of passing on a backend message.
+  if (response.status === 502) {
+    throw new Error(
+      "The creator's Lightning wallet isn't responding right now, so no invoice was created and nothing was charged. Please try again later.",
+    )
+  }
+
   if (!response.ok) {
     const detail = await response.text().catch(() => '')
     throw new Error(
