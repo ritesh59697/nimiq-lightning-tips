@@ -61,3 +61,20 @@ function parseStallSeconds(raw: string | undefined): number {
 
 export const walletStallMs =
   parseStallSeconds(import.meta.env.VITE_WALLET_STALL_SECONDS) * 1_000
+
+function positiveIntEnv(raw: string | undefined, fallback: number): number {
+  const value = Number.parseInt((raw ?? '').trim(), 10)
+  return Number.isInteger(value) && value > 0 ? value : fallback
+}
+
+/**
+ * Bounds for a custom tip amount and message. The server enforces its own
+ * copy of these (TIP_MIN_SATS etc.); these only drive in-page feedback.
+ */
+export const tipMinSats = positiveIntEnv(import.meta.env.VITE_TIP_MIN_SATS, tipPresetsSats[0])
+export const tipMaxSats = positiveIntEnv(import.meta.env.VITE_TIP_MAX_SATS, 100_000)
+export const tipMessageMaxChars = positiveIntEnv(import.meta.env.VITE_TIP_MESSAGE_MAX_CHARS, 140)
+
+/** Currency for the fiat estimate when Nimiq Pay does not report one. */
+export const fallbackFiat =
+  (import.meta.env.VITE_FALLBACK_FIAT ?? '').trim().toUpperCase() || 'USD'

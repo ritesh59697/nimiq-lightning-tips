@@ -125,11 +125,12 @@ export function describeError(error: unknown): {
   }
 }
 
-export async function createInvoice(amountSats: number): Promise<Invoice> {
+export async function createInvoice(amountSats: number, message = ''): Promise<Invoice> {
+  const trimmed = message.trim()
   const response = await fetch('/api/invoice', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ amountSats }),
+    body: JSON.stringify(trimmed ? { amountSats, message: trimmed } : { amountSats }),
   })
 
   // A 500 here means the deployment has no Lightning backend configured yet.
@@ -219,4 +220,30 @@ export async function payInvoice(
 ): Promise<{ txHash: string; swapId: string }> {
   const result = await nimiq.payLightningInvoice({ invoice: invoice.paymentRequest })
   return { txHash: result.hash, swapId: result.swapId }
+}
+
+/** BTC price in the given currency, or null when it cannot be read. */
+export async function fetchBtcPrice(fiat: string): Promise<number | null> {
+  try {
+    const response = await fetch(`/api/price?fiat=${encodeURIComponent(fiat)}`)
+    if (!response.ok) return null
+    const data = (await response.json()) as { btcPrice?: unknown }
+    const price = Number(data.btcPrice)
+    return Number.isFinite(price) && price > 0 ? price : null
+  } catch {
+    return null
+  }
+}
+
+/** Number of tips that have settled in the creator's wallet, or null. */
+export async function fetchTipCount(): Promise<number | null> {
+  try {
+    const response = await fetch('/api/stats')
+    if (!response.ok) return null
+    const data = (await response.json()) as { tips?: unknown }
+    const tips = Number(data.tips)
+    return Number.isInteger(tips) && tips >= 0 ? tips : null
+  } catch {
+    return null
+  }
 }

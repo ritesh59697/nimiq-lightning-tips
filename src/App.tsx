@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { init, type NimiqProvider } from '@nimiq/mini-app-sdk'
-import { creator, tipPresetsSats, walletStallMs } from './lib/config'
+import {
+  creator,
+  fallbackFiat,
+  tipMaxSats,
+  tipMessageMaxChars,
+  tipMinSats,
+  tipPresetsSats,
+  walletStallMs,
+} from './lib/config'
 import {
   awaitSettlement,
   checkSettlement,
   createInvoice,
   describeError,
+  fetchBtcPrice,
+  fetchTipCount,
   payInvoice,
   type TipStage,
 } from './lib/lightning'
-import { formatSats, insideNimiqPay, lightningAvailable } from './lib/host'
+import { formatFiat, formatSats, hostFiat, insideNimiqPay, lightningAvailable } from './lib/host'
 import {
   ArrowLeftRight,
   Check,
@@ -36,7 +46,26 @@ type ProviderState =
 export default function App() {
   const [provider, setProvider] = useState<ProviderState>({ status: 'connecting' })
   const [stage, setStage] = useState<TipStage>({ status: 'idle' })
-  const [selectedSats, setSelectedSats] = useState<number>(tipPresetsSats[0])
+  const [presetSats, setPresetSats] = useState<number>(tipPresetsSats[0])
+  const [customSats, setCustomSats] = useState('')
+  const [message, setMessage] = useState('')
+  const [btcPrice, setBtcPrice] = useState<number | null>(null)
+  const [tipCount, setTipCount] = useState<number | null>(null)
+  const fiat = hostFiat ?? fallbackFiat
+
+  // A typed amount overrides the preset buttons until it is cleared.
+  const customValue = customSats.trim() === '' ? null : Number(customSats)
+  const selectedSats = customValue ?? presetSats
+  const amountError =
+    customValue === null
+      ? null
+      : !Number.isInteger(customValue)
+        ? 'Enter a whole number of sats.'
+        : customValue < tipMinSats
+          ? `The smallest tip is ${formatSats(tipMinSats)} sats.`
+          : customValue > tipMaxSats
+            ? `The largest tip is ${formatSats(tipMaxSats)} sats.`
+            : null
   const abortRef = useRef<AbortController | null>(null)
   const [stall, setStall] = useState<StallState>('none')
   // Set when a manual status check proves the tip arrived while the wallet
@@ -75,6 +104,20 @@ export default function App() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // Both are optional extras: the page works the same if either is missing.
+  useEffect(() => {
+    let cancelled = false
+    void fetchBtcPrice(fiat).then((price) => {
+      if (!cancelled) setBtcPrice(price)
+    })
+    void fetchTipCount().then((count) => {
+      if (!cancelled) setTipCount(count)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [fiat])
+
   // Nimiq Pay has been seen never returning from payLightningInvoice. Rather
   // than spin forever, offer a status check after a while. It never offers a
   // new tip: the pending payment could still complete and send a second one.
@@ -101,7 +144,7 @@ export default function App() {
   }, [stage])
 
   const sendTip = useCallback(async () => {
-    if (provider.status !== 'ready') return
+    if (provider.status !== 'ready' || amountError) return
 
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -111,7 +154,7 @@ export default function App() {
 
     let invoice
     try {
-      invoice = await createInvoice(selectedSats)
+      invoice = await createInvoice(selectedSats, message)
     } catch (error) {
       setStage({
         status: 'failed',
@@ -169,6 +212,7 @@ export default function App() {
     })
 
     if (settlement.settled) {
+      setTipCount((count) => (count === null ? count : count + 1))
       setStage({ status: 'settled', invoice, ...payment })
     } else {
       setStage({
@@ -179,14 +223,15 @@ export default function App() {
           : 'The payment was submitted but has not settled yet.',
       })
     }
-  }, [provider, selectedSats])
+  }, [provider, selectedSats, message, amountError])
 
   const busy =
     stage.status === 'creating-invoice' ||
     stage.status === 'awaiting-approval' ||
     stage.status === 'confirming'
 
-  const disabled = provider.status !== 'ready' || busy || !lightningAvailable
+  const disabled =
+    provider.status !== 'ready' || busy || !lightningAvailable || amountError !== null
 
   const showProgress = busy || stage.status === 'settled'
 
@@ -208,6 +253,12 @@ export default function App() {
         <h1>{creator.name}</h1>
         {creator.handle ? <p className="handle">{creator.handle}</p> : null}
         {creator.blurb ? <p className="blurb">{creator.blurb}</p> : null}
+        {tipCount ? (
+          <p className="tip-count">
+            <Zap size={14} aria-hidden="true" />
+            {formatSats(tipCount)} {tipCount === 1 ? 'tip' : 'tips'} received
+          </p>
+        ) : null}
       </header>
 
       {!lightningAvailable ? (
@@ -232,24 +283,78 @@ export default function App() {
           Choose an amount
         </h2>
 
-        <p className="amount-display" aria-live="polite">
-          <span className="amount-value">{formatSats(selectedSats)}</span>
-          <span className="amount-unit">sats</span>
-        </p>
+        <div className="amount-summary" aria-live="polite">
+          <p className="amount-display">
+            <span className="amount-value">
+              {amountError || !Number.isFinite(selectedSats) ? '—' : formatSats(selectedSats)}
+            </span>
+            <span className="amount-unit">sats</span>
+          </p>
+          {btcPrice && !amountError ? (
+            <p className="amount-fiat">≈ {formatFiat(selectedSats, btcPrice, fiat)}</p>
+          ) : null}
+        </div>
 
         <div className="amounts" role="group" aria-label="Tip amount">
           {tipPresetsSats.map((sats) => (
             <button
               key={sats}
               type="button"
-              className={sats === selectedSats ? 'amount amount--active' : 'amount'}
-              aria-pressed={sats === selectedSats}
-              onClick={() => setSelectedSats(sats)}
+              className={customValue === null && sats === presetSats ? 'amount amount--active' : 'amount'}
+              aria-pressed={customValue === null && sats === presetSats}
+              onClick={() => {
+                setPresetSats(sats)
+                setCustomSats('')
+              }}
               disabled={busy}
             >
               {formatSats(sats)}
             </button>
           ))}
+        </div>
+
+        <div className="field">
+          <label htmlFor="custom-sats">Or enter an amount in sats</label>
+          <input
+            id="custom-sats"
+            className={amountError ? 'input input--invalid' : 'input'}
+            type="number"
+            inputMode="numeric"
+            min={tipMinSats}
+            max={tipMaxSats}
+            step={1}
+            placeholder={`${formatSats(tipMinSats)} – ${formatSats(tipMaxSats)}`}
+            value={customSats}
+            onChange={(event) => setCustomSats(event.target.value)}
+            disabled={busy}
+            aria-invalid={amountError !== null}
+            aria-describedby={amountError ? 'custom-sats-error' : undefined}
+          />
+          {amountError ? (
+            <p id="custom-sats-error" className="field-error">
+              {amountError}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="field">
+          <label htmlFor="tip-message">
+            Message <span className="optional">(optional)</span>
+          </label>
+          <textarea
+            id="tip-message"
+            className="input"
+            rows={2}
+            maxLength={tipMessageMaxChars}
+            placeholder={`Say thanks to ${creator.name}`}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            disabled={busy}
+            aria-describedby="tip-message-count"
+          />
+          <p id="tip-message-count" className="field-hint">
+            Sent with the tip. {[...message].length}/{tipMessageMaxChars}
+          </p>
         </div>
 
         <button

@@ -5,21 +5,42 @@
  * server-side and never taken from a client-supplied invoice string.
  */
 
-import { json, readConfig } from './lnbits.js'
+import { json, readConfig, readLimits } from './lnbits.js'
+
+/** Control characters would corrupt the memo shown in the creator's wallet. */
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g
 
 export async function createInvoice(request: Request): Promise<Response> {
   // Validate the request before touching configuration, so a malformed
   // request is reported as a 400 rather than blamed on the backend.
-  let body: { amountSats?: unknown }
+  let body: { amountSats?: unknown; message?: unknown }
   try {
-    body = (await request.json()) as { amountSats?: unknown }
+    body = (await request.json()) as { amountSats?: unknown; message?: unknown }
   } catch {
     return new Response('Expected a JSON body.', { status: 400 })
   }
 
+  const limits = readLimits()
   const amountSats = Number(body.amountSats)
   if (!Number.isInteger(amountSats) || amountSats <= 0) {
     return new Response('amountSats must be a positive integer.', { status: 400 })
+  }
+  if (amountSats < limits.minSats || amountSats > limits.maxSats) {
+    return new Response(
+      `amountSats must be between ${limits.minSats} and ${limits.maxSats}.`,
+      { status: 400 },
+    )
+  }
+
+  if (body.message !== undefined && typeof body.message !== 'string') {
+    return new Response('message must be a string.', { status: 400 })
+  }
+  const message = (body.message ?? '').replace(CONTROL_CHARS, ' ').trim()
+  if ([...message].length > limits.messageMaxChars) {
+    return new Response(
+      `message must be at most ${limits.messageMaxChars} characters.`,
+      { status: 400 },
+    )
   }
 
   let config
@@ -40,7 +61,7 @@ export async function createInvoice(request: Request): Promise<Response> {
       body: JSON.stringify({
         out: false,
         amount: amountSats,
-        memo: 'Lightning tip',
+        memo: message ? `Lightning tip: ${message}` : 'Lightning tip',
         unit: 'sat',
       }),
     })

@@ -34,3 +34,15 @@ export function randomId(): string {
   }
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
+
+const SATS_PER_BTC = 100_000_000
+
+/** Fiat value of an amount of sats, formatted for the host's language. */
+export function formatFiat(sats: number, btcPrice: number, currency: string): string {
+  const value = (sats / SATS_PER_BTC) * btcPrice
+  return new Intl.NumberFormat(hostLanguage ?? undefined, {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: value < 1 ? 2 : value < 100 ? 2 : 0,
+  }).format(value)
+}
