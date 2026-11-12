@@ -5,10 +5,21 @@
  */
 
 import { cachedJson, readConfig } from './lnbits.js'
+import { readLightningAddress } from './lnaddress.js'
 
 const CACHE_SECONDS = 60
 
 export async function getStats(): Promise<Response> {
+  // A Lightning address gives no read access to the wallet's history, so
+  // there is nothing honest to count. The page simply hides the counter.
+  try {
+    if (readLightningAddress()) {
+      return new Response('Tip count is not available for this wallet.', { status: 404 })
+    }
+  } catch {
+    return new Response('Lightning backend is not configured.', { status: 500 })
+  }
+
   let config
   try {
     config = readConfig()

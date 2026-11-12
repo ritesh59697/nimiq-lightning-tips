@@ -64,6 +64,24 @@ reaches the real wallet, and its invoices are deliberately not payable.
 
 ### Lightning backend
 
+There are two ways to receive tips. A Lightning address is simpler and is
+used whenever `LIGHTNING_ADDRESS` is set.
+
+#### Option A: a Lightning address (recommended)
+
+Set `LIGHTNING_ADDRESS` to your address, e.g. `you@coinos.io` or `you@blink.sv`.
+No key is stored: each tip requests a fresh fixed-amount invoice through
+LNURL-pay, and settlement is read from the
+[LUD-21](https://github.com/lnurl/luds/blob/luds/21.md) `verify` URL the wallet
+returns. The tip message is passed as an LNURL comment (LUD-12).
+
+The wallet must support LUD-21, otherwise the app cannot confirm a tip arrived
+and refuses to create invoices. Blink, Coinos and Alby support it. The public
+tip counter is hidden in this mode, because an address gives no access to the
+wallet's history.
+
+#### Option B: LNbits
+
 `api/invoice.ts` and `api/status.ts` talk to an [LNbits](https://lnbits.com)
 instance.
 
@@ -78,7 +96,8 @@ admin key here.
 
 > `legend.lnbits.com`, named in many older tutorials, is no longer reachable.
 > Demo instances are custodial and meant for testing — do not leave meaningful
-> funds in one.
+> funds in one. `demo.lnbits.com` also deletes wallets without notice, which is
+> why Option A is recommended for anything that has to stay up.
 
 #### API behaviour this relies on
 

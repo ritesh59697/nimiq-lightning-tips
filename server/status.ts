@@ -7,11 +7,43 @@
  */
 
 import { json, readConfig } from './lnbits.js'
+import {
+  checkAddressSettlement,
+  isAddressReference,
+  readLightningAddress,
+} from './lnaddress.js'
 
 export async function checkStatus(request: Request): Promise<Response> {
   // Validate the request before touching configuration, so a malformed
   // request is reported as a 400 rather than blamed on the backend.
   const hash = new URL(request.url).searchParams.get('hash')
+
+  let address
+  try {
+    address = readLightningAddress()
+  } catch (error) {
+    console.error('[status] configuration error', error)
+    return new Response('Lightning backend is not configured.', { status: 500 })
+  }
+
+  // With a Lightning address, the reference is an encoded LUD-21 verify URL
+  // rather than a payment hash.
+  if (address) {
+    if (!hash || !isAddressReference(hash)) {
+      return new Response('A payment reference is required.', { status: 400 })
+    }
+    try {
+      const result = await checkAddressSettlement(address, hash)
+      if (!result) {
+        return new Response('That reference does not belong to this wallet.', { status: 400 })
+      }
+      return json(result)
+    } catch (error) {
+      console.error('[status] Lightning address lookup failed', error)
+      return new Response('Could not read the payment status.', { status: 502 })
+    }
+  }
+
   if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) {
     return new Response('A 64-character hex payment hash is required.', {
       status: 400,

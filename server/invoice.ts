@@ -6,6 +6,11 @@
  */
 
 import { json, readConfig, readLimits } from './lnbits.js'
+import {
+  AddressBackendError,
+  createAddressInvoice,
+  readLightningAddress,
+} from './lnaddress.js'
 
 /** Control characters would corrupt the memo shown in the creator's wallet. */
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g
@@ -41,6 +46,28 @@ export async function createInvoice(request: Request): Promise<Response> {
       `message must be at most ${limits.messageMaxChars} characters.`,
       { status: 400 },
     )
+  }
+
+  // A configured Lightning address takes precedence over LNbits: it needs no
+  // stored key and the creator's wallet cannot be wiped like a demo account.
+  let address
+  try {
+    address = readLightningAddress()
+  } catch (error) {
+    console.error('[invoice] configuration error', error)
+    return new Response('Lightning backend is not configured.', { status: 500 })
+  }
+  if (address) {
+    try {
+      const invoice = await createAddressInvoice(address, amountSats, message)
+      return json({ ...invoice, amountSats })
+    } catch (error) {
+      if (error instanceof AddressBackendError) {
+        return new Response(error.message, { status: error.status })
+      }
+      console.error('[invoice] Lightning address request failed', error)
+      return new Response("Could not reach the creator's Lightning wallet.", { status: 502 })
+    }
   }
 
   let config
